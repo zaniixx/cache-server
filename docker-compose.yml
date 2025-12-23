@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  # The actual caching engine (Nginx)
+  lancache-monolithic:
+    image: lancachenet/monolithic:latest
+    container_name: lancache-monolithic
+    restart: unless-stopped
+    ports:
+      - "80:80"        # HTTP traffic for updates
+      - "443:443"      # HTTPS traffic (passed to SNI proxy)
+    env_file: .env
+    volumes:
+      - ./cache:/data/cache
+      - ./logs:/data/logs
+
+  # The DNS server that tells clients "I am the update server"
+  lancache-dns:
+    image: lancachenet/lancache-dns:latest
+    container_name: lancache-dns
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "53:53/udp"
+      - "53:53/tcp"
+    environment:
+      - UPSTREAM_DNS=8.8.8.8  # If it's not a cached domain, go to Cloudeflar
+    # This maps custom domains if needed
+    volumes:
+      - ./dns/custom.hosts:/etc/bind/custom.hosts 
+
+  # Handles the HTTPS handshakes so connections don't drop
+  sniproxy:
+    image: lancachenet/sniproxy:latest
+    container_name: sniproxy
+    restart: unless-stopped
+    ports:
+      - "443:443/tcp"
